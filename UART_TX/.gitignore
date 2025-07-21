@@ -1,0 +1,14 @@
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb~
+*.swp
+
+# Python cache
+__pycache__/
+
+# OS artifacts
+.DS_Store
+
+# VSCode
+.vscode/
