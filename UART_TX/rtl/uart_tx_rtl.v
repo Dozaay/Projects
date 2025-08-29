@@ -20,7 +20,7 @@ module uart_tx_rtl
                );
     
     // bit index of transmitted bits
-    reg[$clog2(N)-1:0] bit_indx;
+    reg[$clog2(N)-1:0] bit_idx;
     
 
     //FSM STATES--------------------  
@@ -41,7 +41,8 @@ module uart_tx_rtl
     localparam integer W = (clk_per_b <= 1) ? 1 : $clog2(clk_per_b); // 
     reg [W - 1:0] bd_cnt;
     wire bt =  (bd_cnt == clk_per_b - 1);
-    //------------------------------ 
+    //------------------------------
+
     // goes to next state or resets
     always @(posedge RST| posedge i_clk)
         begin 
@@ -51,33 +52,37 @@ module uart_tx_rtl
         end 
             case(state)
 
-                IDLE:   
-                begin
-                    tx = 1b'1; 
-                    if (dv == 1) begin 
+                IDLE:   begin
+                    tx <= 1b'1; 
+                    if (dv) begin 
                         shift <= i_data;
-                        bit_idx = 'd0;
+                        bit_idx <= 'd0;
                         state <= START;
                     end 
                 end
 
                 START:  begin 
-                        tx <= 1'b0;
-                        if (bt) begin
-                            state <= DATA_BITS; 
+                    tx <= 1'b0;
+                    if (bt) begin
+                        state <= DATA_BITS; 
+                    end
+                end 
+                DATA_BITS:  begin
+                    tx <= shift[0]; 
+                    if (bt) begin 
+                        shift <= {1'b0, shift[N-1:1]};
+                        if (bit_idx == N-1) begin 
+                            state <= STOP; 
+                        end else begin  
+                            bit_idx <= bit_idx + 1'b1;
                         end
                     end 
-                DATA_BITS:  begin
-                        tx <= shift[0];
-                        if (bt) begin 
-                            shift <= {1'b0, shift[N-1:1]};
-                            if (bit_idx == N-1) begin 
-                                state <= STOP; 
-                            end else begin  
-                                bit_idx <= bit_idx + 1'b1;
                 end 
                 STOP:   begin
+                    tx <= 1b'1;
+                    if (bt) begin
                         state <= CLEAN_UP;
+                    end
                 end
 
                 CLEAN_UP:   
@@ -88,4 +93,5 @@ module uart_tx_rtl
                 end
                 default:    state <= IDLE;
             endcase
+        end
 endmodule
