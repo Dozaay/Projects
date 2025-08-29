@@ -1,58 +1,91 @@
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//Description
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-//BAUD_TICKS = SYS_CLK_FREQ/BAUD_RATE, 
+
+
 module uart_tx_rtl
-                //Params: bits per trans(B_PER_T = 8 by default),
-                //... BAUD RATE(BR) = 9600 by default
-                //... SYS_CLK_FREQ(CLK_FREQ)
-                 #(parameter B_PER_T = 8, 
-                   parameter BR = 9600, 
-                   parameter CLK_FREQ)              
-                //inputs: system clk,rst, n data inp, valid data inp,
-                //ouputs: tx, tx_ready 
-                  (input [B_PER_T-1:0] i_data,
-                   input DV,
-                   input RST
-                   input i_clk,
-                   output tx,
-                   output tx_done);
-    //FSM STATES 
-    localparam IDLE = 3b'001; 
-    localparam START = 3b'010; 
-    localparam DATA_BITS = 3b'011;
-    localparam STOP = 3b'100;
-    localparam CLEANUP = 3b'101; 
+                 #(parameter N = 8, // data bits 
+                   parameter BR = 9600, // baud rate 
+                   parameter CLK_FREQ = 50000000 // clock frequency in Hz              
+                 )(
+                   input [N-1:0] i_data, // data to be sent in LSB
+                   input dv, // data valid 
+                   input rst, // asycn reset, active H
+                   input i_clk, 
 
-    //BAUD TICKS 
-    localparam integer bd = CLK_FREQ/BR;
-
-    always @(posedge i_clk)
-        begin 
-            if (RST) begin
-            
-            end
-           
-            else begin
-            case(){
-                IDLE: begin
-                
-                end
-                
-                START: begin
-                
-
-                end
-
-                DATA_BITS: begin
+                   output reg tx, // serial line 
+                   output reg tx_done, // pulse 1 clk cycle after stop 
+                   output tx_ready // high when idle 
+               );
     
-                end 
+    // bit index of transmitted bits
+    reg[$clog2(N)-1:0] bit_indx;
+    
 
-                STOP: begin 
+    //FSM STATES--------------------  
+    localparam [2:0]
+        IDLE = 3b'000, 
+        START = 3b'001, 
+        DATA_BITS = 3b'010, 
+        STOP = 3b'011, 
+        CLEANUP = 3b'100;
 
-                end
+    reg [2:0] state; 
+    reg [N - 1:0] shift; 
+    assign tx_ready =  (state == IDLE);
+    //------------------------------ 
 
-                CLEANUP: begin 
-
-                end
-            }
+    //BAUD TICKS-------------------- 
+    localparam integer clk_per_b = CLK_FREQ/BR; // # of sys clk cycles that make up one bit (clk per bit) 
+    localparam integer W = (clk_per_b <= 1) ? 1 : $clog2(clk_per_b); // 
+    reg [W - 1:0] bd_cnt;
+    wire bt =  (bd_cnt == clk_per_b - 1);
+    //------------------------------ 
+    // goes to next state or resets
+    always @(posedge RST| posedge i_clk)
+        begin 
+            if (RST) 
+                state <= IDLE;
+                tx = 1b'1;
         end 
+            case(state)
+
+                IDLE:   
+                begin
+                    tx = 1b'1; 
+                    if (dv == 1) begin 
+                        shift <= i_data;
+                        bit_idx = 'd0;
+                        state <= START;
+                    end 
+                end
+
+                START:  begin 
+                        tx <= 1'b0;
+                        if (bt) begin
+                            state <= DATA_BITS; 
+                        end
+                    end 
+                DATA_BITS:  begin
+                        tx <= shift[0];
+                        if (bt) begin 
+                            shift <= {1'b0, shift[N-1:1]};
+                            if (bit_idx == N-1) begin 
+                                state <= STOP; 
+                            end else begin  
+                                bit_idx <= bit_idx + 1'b1;
+                end 
+                STOP:   begin
+                        state <= CLEAN_UP;
+                end
+
+                CLEAN_UP:   
+                begin    
+                    tx_done <= 1'b1;
+                    state <= IDLE;
+                        
+                end
+                default:    state <= IDLE;
+            endcase
 endmodule
